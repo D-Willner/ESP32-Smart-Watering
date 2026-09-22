@@ -1,0 +1,33 @@
+menu "Wi-Fi Configuration"
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        help
+            SSID (network name) you want to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        help
+            Password of the Wi-Fi network you want to connect to.
+endmenu
+
+menu "ADC Configuration"
+    config ADC1_GPIO_PIN
+        int "ADC1 GPIO Channel PIN"
+        default 35
+        help
+            See adc_channel.h
+
+    config ADC1_GPIO_CHANNEL
+        int "ADC1 GPIO Channel"
+        default 7
+        help
+            See adc_channel.h
+endmenu
+
+menu "Manual Watering Button"
+    config WATER_BUTTON_GPIO_PIN
+        int "Manual watering button GPIO PIN number"
+        default 26
+        help
+            GPIO PIN number to which the button for manual control of watering is connected to
+endmenu
