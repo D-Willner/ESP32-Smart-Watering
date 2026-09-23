@@ -127,7 +127,7 @@ menu "Pump Configuration"
 
     config WATER_TIME_CONSTANT
         float "Water time constant K"
-        default 1
+        default 1.0
         help
             This constant needs to fullfill:
             water_dispensed[mL] = K * pump_on_time[ms]

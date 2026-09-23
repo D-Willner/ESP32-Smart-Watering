@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdatomic.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -30,9 +31,10 @@
 static const char* TAG = "WATERING";
 
 static QueueHandle_t queue;
-static uint16_t pump_on_time;
-static uint16_t watering_trigger;
-static uint16_t rearm_trigger;
+static _Atomic uint16_t pump_on_time;
+static _Atomic uint16_t watering_trigger;
+static _Atomic uint16_t rearm_trigger;
+static atomic_bool watering;
 
 void init_watering()
 {
@@ -43,6 +45,7 @@ void init_watering()
     pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
     watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
     rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
+    watering = false;
 
     xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);
     xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, NULL);
@@ -73,13 +76,17 @@ void pump_control_task(void* vParameters)
 
         if(command == 0) continue;
         else if(command > 0){
+            watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
             vTaskDelay(pdMS_TO_TICKS(pump_on_time));
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+            watering = false;
         } else if(command == -1){
+            watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
         } else if(command == -2){
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+            watering = false;
         } else {
             ESP_LOGI(TAG, "Received invalid command: %i", command);
         }
@@ -134,4 +141,39 @@ esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWok
 uint16_t get_pump_on_time()
 {
     return pump_on_time;
+}
+
+uint16_t get_pump_amount()
+{
+    return WATER_TIME_CONSTANT * pump_on_time;
+}
+
+float get_trigger_humidity_pct()
+{
+    return ANALOGUE_MOISTURE_CONSTANT * watering_trigger;
+}
+
+float get_rearm_humidity_pct()
+{
+    return ANALOGUE_MOISTURE_CONSTANT * rearm_trigger;
+}
+
+bool is_watering()
+{
+    return watering;
+}
+
+void set_pump_on_time(uint16_t time_ms)
+{
+    pump_on_time = time_ms;
+}
+
+void set_trigger_humidity(uint16_t val)
+{
+    watering_trigger = val;
+}
+
+void set_rearm_humidity(uint16_t val)
+{
+    rearm_trigger = val;
 }

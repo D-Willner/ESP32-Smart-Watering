@@ -13,10 +13,15 @@
 #include "sdkconfig.h"
 #include "cJSON.h"
 #include "mdns.h"
+#include "measurements.h"
+#include "watering.h"
 
 #define MDNS_HOST_NAME CONFIG_MDNS_HOST_NAME
 
-static const char *TAG = "HTTP SERVER";
+#define WATER_TIME_CONSTANT CONFIG_WATER_TIME_CONSTANT
+#define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
+
+static const char* TAG = "HTTP SERVER";
 
 // HTML web pages to serve 
 extern const char html_page[] asm("_binary_index_html_start"); 
@@ -31,8 +36,8 @@ static esp_err_t api_get_status_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
     cJSON* j = cJSON_CreateObject();
-    cJSON_AddNumberToObject(j, "humidity_pct", 42.5);
-    cJSON_AddBoolToObject(j, "watering", false);
+    cJSON_AddNumberToObject(j, "humidity_pct", current_moisture_pct());
+    cJSON_AddBoolToObject(j, "watering", is_watering());
     char *s = cJSON_Print(j);
 
     esp_err_t ret = httpd_resp_send(req, s, HTTPD_RESP_USE_STRLEN);
@@ -46,7 +51,7 @@ static esp_err_t api_post_water_handler(httpd_req_t *req)
 {
     if(true){
         httpd_resp_set_status(req, "202 Accepted");
-        // water the plant/ signal the cor task etc.
+        run_pump(get_pump_on_time());
     } else {
         httpd_resp_set_status(req, "409 Conflict");
     }
@@ -61,9 +66,9 @@ static esp_err_t api_get_config_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
     cJSON* j = cJSON_CreateObject();
-    cJSON_AddNumberToObject(j, "water_amount_ml", 100);
-    cJSON_AddNumberToObject(j, "trigger_humidity_pct", 30);
-    cJSON_AddNumberToObject(j, "rearm_humidity_pct", 45);
+    cJSON_AddNumberToObject(j, "water_amount_ml", get_pump_amount());
+    cJSON_AddNumberToObject(j, "trigger_humidity_pct", get_trigger_humidity_pct());
+    cJSON_AddNumberToObject(j, "rearm_humidity_pct", get_rearm_humidity_pct());
     char *s = cJSON_Print(j);
 
     esp_err_t ret = httpd_resp_send(req, s, HTTPD_RESP_USE_STRLEN);
@@ -77,7 +82,7 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
 {
     size_t len = req->content_len;
     char* buffer = malloc(len);    //  check if too big maybe
-    int rec = httpd_req_recv(req, buffer, len);
+    httpd_req_recv(req, buffer, len);
 
     bool req_ok = true;
     cJSON* j = cJSON_Parse(buffer);
@@ -97,12 +102,14 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
     }
 
     int water_amount_ml = jwater_amount_ml->valueint;
-    double trigger_humidity_pct = jtrigger_humidity_pct->valuedouble;
-    double rearm_humidity_pct = jrearm_humidity_pct->valuedouble;
+    float trigger_humidity_pct = jtrigger_humidity_pct->valuedouble;
+    float rearm_humidity_pct = jrearm_humidity_pct->valuedouble;
 
     if(req_ok){
         httpd_resp_set_status(req, "204 No Content");
-        // accept new config
+        set_pump_on_time(water_amount_ml * (1/WATER_TIME_CONSTANT));
+        set_trigger_humidity(trigger_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
+        set_rearm_humidity(rearm_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
     } else {
         httpd_resp_set_status(req, "400 Bad Request");
     }
@@ -222,13 +229,6 @@ void init_mdns()
 
 void start_http_server()
 {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 

@@ -25,7 +25,21 @@ esp_err_t stop_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken);
 esp_err_t run_pump(uint16_t time_ms);
 esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWoken);
 
-//
+//  safe read write access (currently thread safety is guaranteed by atomic types)
 uint16_t get_pump_on_time();
+
+uint16_t get_pump_amount();
+
+float get_trigger_humidity_pct();
+
+float get_rearm_humidity_pct();
+
+bool is_watering();
+
+void set_pump_on_time(uint16_t time_ms);
+
+void set_trigger_humidity(uint16_t val);
+
+void set_rearm_humidity(uint16_t val);
 
 #endif
