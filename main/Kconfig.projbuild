@@ -1,4 +1,4 @@
-menu "Wi-Fi Configuration"
+menu "Network Configuration"
     config ESP_WIFI_SSID
         string "WiFi SSID"
         help
@@ -8,6 +8,16 @@ menu "Wi-Fi Configuration"
         string "WiFi Password"
         help
             Password of the Wi-Fi network you want to connect to.
+
+    config MDNS_ENABLE
+        bool "Enable mDNS"
+        default y
+
+    config MDNS_HOST_NAME
+        string "mDNS Host Name"
+        default "watering"
+        help
+            Web Interface can be reached under <mdnshostname>.local
 endmenu
 
 menu "ADC Configuration"
@@ -32,14 +42,50 @@ menu "Manual Watering Button"
             GPIO PIN number to which the button for manual control of watering is connected to
 endmenu
 
-menu "mDNS Configuration"
-    config MDNS_ENABLE
-        bool "Enable mDNS"
-        default y
-
-    config MDNS_HOST_NAME
-        string "mDNS Host Name"
-        default "watering"
+menu "Pump Configuration"
+    config PUMP_CONTROL_PIN
+        int "Pump Control Pin"
+        default 27
         help
-            Web Interface can be reached under <mdnshostname>.local
+            GPIO PIN number for the PIN that controls the pump motor.
+
+    config PUMP_CONTROL_INVERT
+        bool "Invert Pump Control"
+        default n
+        help
+            When false the pump turns on when the pump control pin is set to high. Setting this inverts the behaviour.
+
+    config DEFAULT_PUMP_ON_TIME
+        int "Default pump on time"
+        default 500
+        help
+            Time in ms for which the pump turns on when command to water is given.
+    
+    config DEFAULT_WATERING_TRIGGER
+        int "Default watering trigger level"
+        default 500
+        help
+            Default analog signal level which causes the pump to begin watering.
+
+    config DEFAULT_REARM_TRIGGER
+        int "Default rearm trigger level"
+        default 2000
+        help
+            After crossing this analog signal level the pump will again water when falling under the watering trigger level.
+
+    config WATER_TIME_CONSTANT
+        float "Water time constant K"
+        default 1
+        help
+            This constant needs to fullfill:
+            water_dispensed[mL] = K * pump_on_time[ms]
+
+    config ANALOGUE_MOISTURE_CONSTANT
+        float "Analogue moisture constant L"
+        default 1
+        help
+            This constant needs to fullfill:
+            moisture[%] = L * ADC_signal_level
 endmenu
+
+
