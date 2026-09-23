@@ -71,6 +71,9 @@ static esp_err_t api_get_config_handler(httpd_req_t *req)
     cJSON_AddNumberToObject(j, "rearm_humidity_pct", (int)get_rearm_humidity_pct());
     char *s = cJSON_Print(j);
 
+    ESP_LOGI(TAG, "water: %i, trigger: %i, rearm: %i", 
+        get_pump_amount(), (int)get_trigger_humidity_pct(), (int)get_rearm_humidity_pct());
+
     esp_err_t ret = httpd_resp_send(req, s, HTTPD_RESP_USE_STRLEN);
 
     cJSON_Delete(j);

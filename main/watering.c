@@ -46,18 +46,24 @@ void init_watering()
     watering = false;
 
     nvs_handle_t handle;
-    esp_err_t err = ("config", NVS_READONLY, handle);
+    esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
      if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-        return;
     }
 
-    err = nvs_get_u16(handle, "pot", pump_on_time);
+    uint16_t temp;
+    err = nvs_get_u16(handle, "pot", &temp);
     if(err) pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
-    err = nvs_get_u16(handle, "wt", watering_trigger);
+    else pump_on_time = temp;
+    err = nvs_get_u16(handle, "wt", &temp);
     if(err) watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
-    err = nvs_get_u16(handle, "rt", rearm_trigger);
+    else watering_trigger = temp;
+    err = nvs_get_u16(handle, "rt", &temp);
     if(err) rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
+    else rearm_trigger = temp;
+    
+    ESP_LOGI(TAG, "Initialized with water: %i, trigger: %i, rearm: %i", 
+        pump_on_time, watering_trigger, rearm_trigger);
 
     nvs_close(handle);
 
@@ -202,7 +208,7 @@ void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm
     rearm_trigger = rearm_trigger_val;
 
     nvs_handle_t handle;
-    esp_err_t err = ("config", NVS_READWRITE, handle);
+    esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
      if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
         return;
