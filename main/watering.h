@@ -42,4 +42,7 @@ void set_trigger_humidity(uint16_t val);
 
 void set_rearm_humidity(uint16_t val);
 
+void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val);
+
+
 #endif

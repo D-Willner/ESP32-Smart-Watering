@@ -5,6 +5,7 @@
 #include "driver/gpio.h"
 #include "driver/mcpwm_timer.h"
 #include "esp_log.h"
+#include "nvs.h"
 #include "sdkconfig.h"
 
 #include "watering.h"
@@ -42,10 +43,23 @@ void init_watering()
     gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_INPUT);
 
     queue = xQueueCreate(1,sizeof(int32_t));
-    pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
-    watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
-    rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
     watering = false;
+
+    nvs_handle_t handle;
+    esp_err_t err = ("config", NVS_READONLY, handle);
+     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_get_u16(handle, "pot", pump_on_time);
+    if(err) pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
+    err = nvs_get_u16(handle, "wt", watering_trigger);
+    if(err) watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
+    err = nvs_get_u16(handle, "rt", rearm_trigger);
+    if(err) rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
+
+    nvs_close(handle);
 
     xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);
     xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, NULL);
@@ -179,4 +193,30 @@ void set_trigger_humidity(uint16_t val)
 void set_rearm_humidity(uint16_t val)
 {
     rearm_trigger = val;
+}
+
+void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val)
+{
+    pump_on_time = time_ms;
+    watering_trigger = watering_trigger_val;
+    rearm_trigger = rearm_trigger_val;
+
+    nvs_handle_t handle;
+    esp_err_t err = ("config", NVS_READWRITE, handle);
+     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_set_u16(handle, "pot", time_ms);
+    if(err) ESP_LOGE(TAG, "Could not save pump_on_time to NVS: (%s)", esp_err_to_name(err)); 
+    err = nvs_set_u16(handle, "wt", watering_trigger_val);
+    if(err) ESP_LOGE(TAG, "Could not save watering_trigge to NVS: (%s)", esp_err_to_name(err)); 
+    err = nvs_set_u16(handle, "rt", rearm_trigger_val);
+    if(err) ESP_LOGE(TAG, "Could not save rearm_trigger to NVS: (%s)", esp_err_to_name(err)); 
+
+    err = nvs_commit(handle);
+    if(err) ESP_LOGE(TAG, "Could not save to NVS: (%s)", esp_err_to_name(err));
+
+    nvs_close(handle);
 }

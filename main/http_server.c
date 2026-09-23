@@ -107,9 +107,9 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
 
     if(req_ok){
         httpd_resp_set_status(req, "204 No Content");
-        set_pump_on_time(water_amount_ml * (1/WATER_TIME_CONSTANT));
-        set_trigger_humidity(trigger_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
-        set_rearm_humidity(rearm_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
+        save_config(water_amount_ml * (1/WATER_TIME_CONSTANT), 
+            trigger_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT),
+            rearm_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
     } else {
         httpd_resp_set_status(req, "400 Bad Request");
     }
