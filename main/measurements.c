@@ -8,23 +8,62 @@
 #include "soc/adc_channel.h"
 #include "sdkconfig.h"
 #include "measurements.h"
+#include "watering.h"
 
-#define ADC_ID ADC_UNIT_1
 #define ADC_PIN CONFIG_ADC1_GPIO_PIN
 #define ADC_CHANNEL CONFIG_ADC1_GPIO_CHANNEL
 #define BUTTON_PIN CONFIG_WATER_BUTTON_GPIO_PIN
 
-bool btn_press_flag;
-QueueHandle_t queue;
+#define ADC_POLLING_INTERVALL CONFIG_ADC_POLLING_INTERVALL
+#define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
+
+static const char* TAG = "MEASUREMENT";
+
+static QueueHandle_t queue;
 
 void init_queue()
 {
-    queue = xQueueCreate(1,sizeof(int));
+    queue = xQueueCreate(1,sizeof(uint16_t));
+    uint16_t val = UINT16_MAX;
+    xQueueOverwrite(queue,&val);
 }
 
-void button_ISR(void*)
+void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTickCountFromISR())
 {
-    btn_press_flag = true;
+    uint8_t level = gpio_get_level(BUTTON_PIN);
+    BaseType_t prio;
+
+    #ifdef CONFIG_WATERING_BUTTON_MODE_WHILE_PRESSED
+    if(level == 0){ // ie falling edge
+        #ifndef CONFIG_WATERING_BUTTON_INVERT
+            start_pump_fromISR(&prio);
+        #else
+            stop_pump_fromISR(&prio);
+        #endif
+    } else {
+        #ifndef CONFIG_WATERING_BUTTON_INVERT
+            stop_pump_fromISR(&prio);
+        #else
+            start_pump_fromISR(&prio);
+        #endif
+    }
+    #elifdef CONFIG_WATERING_BUTTON_MODE_SINGLE
+    if(level == 0){ // ie falling edge
+        #ifndef CONFIG_WATERING_BUTTON_INVERT
+            run_pump_fromISR(get_pump_on_time(), &prio);
+        #else
+
+        #endif
+    } else {
+        #ifndef CONFIG_WATERING_BUTTON_INVERT
+
+        #else
+            run_pump_fromISR(get_pump_on_time(), &prio);
+        #endif
+    }
+    #endif
+
+    if(prio == pdTRUE) portYIELD_FROM_ISR();
 }
 
 void init_button()
@@ -32,7 +71,8 @@ void init_button()
     gpio_reset_pin(BUTTON_PIN);
     gpio_set_direction(BUTTON_PIN, GPIO_MODE_INPUT);
     gpio_set_pull_mode(BUTTON_PIN, GPIO_PULLUP_ONLY);
-    gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_NEGEDGE);
+
+    gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
 }
@@ -41,7 +81,7 @@ void adc_read_task(void* vParameters)
 {
     adc_oneshot_unit_handle_t adc_handle;
     adc_oneshot_unit_init_cfg_t adc_unit_init_cfg = {
-        .unit_id = ADC_ID,
+        .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
         .clk_src = 0
     };
@@ -58,17 +98,39 @@ void adc_read_task(void* vParameters)
 
     while(1){
         int measurement;
-        ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, ADC_CHANNEL, &measurement));
-        ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
-        xQueueOverwrite(queue, &measurement);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        if(adc_oneshot_read(adc_handle, ADC_CHANNEL, &measurement) == ESP_OK){
+            uint16_t adc_measurement = (uint16_t)measurement;
+            ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
+            xQueueOverwrite(queue, &adc_measurement);
+        } else{
+            ESP_LOGE(TAG, "Could not read from ADC");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(ADC_POLLING_INTERVALL));
     }
+}
+
+uint16_t current_moisture()
+{
+    uint16_t current;
+    BaseType_t ret = xQueuePeek(queue,&current,0);
+
+    if(ret != pdPASS) return UINT16_MAX;
+    else return current;
+}
+
+float current_moisture_pct()
+{
+    return ANALOGUE_MOISTURE_CONSTANT * current_moisture();
 }
 
 
 void init_measurements()
 {
+#ifdef CONFIG_ENABLE_WATERING_BUTTON
     init_button();
+#endif
+
     init_queue();
     xTaskCreate(adc_read_task, "ADC read task", 2024, NULL, 0, NULL);
 }

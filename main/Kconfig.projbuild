@@ -1,13 +1,9 @@
 menu "Network Configuration"
     config ESP_WIFI_SSID
         string "WiFi SSID"
-        help
-            SSID (network name) you want to connect to.
 
     config ESP_WIFI_PASSWORD
         string "WiFi Password"
-        help
-            Password of the Wi-Fi network you want to connect to.
 
     config MDNS_ENABLE
         bool "Enable mDNS"
@@ -21,21 +17,71 @@ menu "Network Configuration"
 endmenu
 
 menu "ADC Configuration"
+    config ADC_POLLING_INTERVALL
+        int "ADC polling intervall[ms]"
+        default 1000
+        help
+            Time between reads of the moisture sensor
+
     config ADC1_GPIO_PIN
         int "ADC1 GPIO Channel PIN"
         default 35
         help
-            See adc_channel.h
+            Channel 0 : Pin 36
+            Channel 1 : Pin 37
+            Channel 2 : Pin 38
+            Channel 3 : Pin 39
+            Channel 4 : Pin 32
+            Channel 5 : Pin 33
+            Channel 6 : Pin 34
+            Channel 7 : Pin 35
 
     config ADC1_GPIO_CHANNEL
         int "ADC1 GPIO Channel"
         default 7
         help
-            See adc_channel.h
+            Channel 0 : Pin 36
+            Channel 1 : Pin 37
+            Channel 2 : Pin 38
+            Channel 3 : Pin 39
+            Channel 4 : Pin 32
+            Channel 5 : Pin 33
+            Channel 6 : Pin 34
+            Channel 7 : Pin 35
 endmenu
 
 menu "Manual Watering Button"
+    config ENABLE_WATERING_BUTTON
+        bool "Enable watering button"
+        default y
+        help 
+            Enables button for manual control of watering
+
+    config WATERING_BUTTON_INVERT
+        depends on ENABLE_WATERING_BUTTON
+        bool "Invert watering button edge behaviour"
+        default n
+        help 
+            Inverts the edge triggers for the manual watering button
+            If disabled: Falling edge = PUMP ON/START
+                         Rising edge  = PUMP OFF
+
+    choice WATERING_BUTTON_MODE
+        depends on ENABLE_WATERING_BUTTON
+        prompt "Watering button mode"
+        config WATERING_BUTTON_MODE_WHILE_PRESSED
+            bool "While pressed"
+
+        config WATERING_BUTTON_MODE_SINGLE
+            bool "Predetermined"
+        help
+            While pressed: Pump is on while button is pressed
+            Predetermined: Pump is on for the set time
+    endchoice
+
+
     config WATER_BUTTON_GPIO_PIN
+        depends on ENABLE_WATERING_BUTTON
         int "Manual watering button GPIO PIN number"
         default 26
         help
@@ -43,6 +89,12 @@ menu "Manual Watering Button"
 endmenu
 
 menu "Pump Configuration"
+    config MOISTURE_CHECK_INTERVALL
+        int "Moisture check intervall[ms]"
+        default 1000
+        help
+            Time between checks of soil moisture, that control whether the pump is started.
+
     config PUMP_CONTROL_PIN
         int "Pump Control Pin"
         default 27
@@ -82,7 +134,7 @@ menu "Pump Configuration"
 
     config ANALOGUE_MOISTURE_CONSTANT
         float "Analogue moisture constant L"
-        default 1
+        default 0.05
         help
             This constant needs to fullfill:
             moisture[%] = L * ADC_signal_level

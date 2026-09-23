@@ -23,5 +23,9 @@ esp_err_t stop_pump();
 esp_err_t stop_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken);
 
 esp_err_t run_pump(uint16_t time_ms);
+esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWoken);
+
+//
+uint16_t get_pump_on_time();
 
 #endif

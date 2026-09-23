@@ -4,7 +4,7 @@
 
 void init_measurements();
 
-void ADC_read_task(void* vParameters);
+void adc_read_task(void* vParameters);
 
 uint16_t current_moisture();
 
