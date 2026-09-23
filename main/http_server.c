@@ -12,6 +12,9 @@
 #include "esp_http_server.h"
 #include "sdkconfig.h"
 #include "cJSON.h"
+#include "mdns.h"
+
+#define MDNS_HOST_NAME CONFIG_MDNS_HOST_NAME
 
 static const char *TAG = "HTTP SERVER";
 
@@ -202,6 +205,21 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
+void init_mdns()
+{
+    //initialize mDNS service
+    esp_err_t err = mdns_init();
+    if (err) {
+        printf("MDNS Init failed: %d\n", err);
+        return;
+    }
+
+    //set hostname
+    mdns_hostname_set(MDNS_HOST_NAME);
+    //set default instance
+    mdns_instance_name_set("Smart Watering Web Interface");
+}
+
 void start_http_server()
 {
     esp_err_t ret = nvs_flash_init();
@@ -213,6 +231,10 @@ void start_http_server()
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    #ifdef CONFIG_MDNS_ENABLE
+        init_mdns();
+    #endif
 
     esp_netif_create_default_wifi_sta();
 

@@ -31,3 +31,15 @@ menu "Manual Watering Button"
         help
             GPIO PIN number to which the button for manual control of watering is connected to
 endmenu
+
+menu "mDNS Configuration"
+    config MDNS_ENABLE
+        bool "Enable mDNS"
+        default y
+
+    config MDNS_HOST_NAME
+        string "mDNS Host Name"
+        default "watering"
+        help
+            Web Interface can be reached under <mdnshostname>.local
+endmenu
