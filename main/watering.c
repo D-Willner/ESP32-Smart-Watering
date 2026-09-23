@@ -95,7 +95,7 @@ void pump_control_task(void* vParameters)
 
 esp_err_t start_pump()
 {
-    if(xQueuePeek(queue, NULL, 0) == pdPASS) return ESP_FAIL;
+    if(xQueuePeek(queue, NULL, 0) != pdPASS) return ESP_FAIL;
 
     int32_t command = COMMAND_PUMP_START;
     return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
@@ -103,9 +103,10 @@ esp_err_t start_pump()
 
 esp_err_t start_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 {
-    if(xQueuePeek(queue, NULL, 0) == pdPASS) return ESP_FAIL;
+    int32_t command;
+    if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
 
-    int32_t command = COMMAND_PUMP_START;
+    command = COMMAND_PUMP_START;
     return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdPASS ? ESP_OK : ESP_FAIL;
 }
 
@@ -124,17 +125,19 @@ esp_err_t stop_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 
 esp_err_t run_pump(uint16_t time_ms)
 {
-    if(xQueuePeek(queue, NULL, 0) == pdPASS) return ESP_FAIL;
+    int32_t command;
+    //if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
 
-    int32_t command = (int32_t)time_ms;
+    command = (int32_t)time_ms;
     return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWoken)
 {
-    if(xQueuePeekFromISR(queue, NULL) == pdPASS) return ESP_FAIL;
+    int32_t command;
+    if(xQueuePeekFromISR(queue, &command) != pdPASS) return ESP_FAIL;
 
-    int32_t command = (int32_t)time_ms;
+    command = (int32_t)time_ms;
     return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdPASS ? ESP_OK : ESP_FAIL;
 }
 

@@ -67,8 +67,8 @@ static esp_err_t api_get_config_handler(httpd_req_t *req)
 
     cJSON* j = cJSON_CreateObject();
     cJSON_AddNumberToObject(j, "water_amount_ml", get_pump_amount());
-    cJSON_AddNumberToObject(j, "trigger_humidity_pct", get_trigger_humidity_pct());
-    cJSON_AddNumberToObject(j, "rearm_humidity_pct", get_rearm_humidity_pct());
+    cJSON_AddNumberToObject(j, "trigger_humidity_pct", (int)get_trigger_humidity_pct());
+    cJSON_AddNumberToObject(j, "rearm_humidity_pct", (int)get_rearm_humidity_pct());
     char *s = cJSON_Print(j);
 
     esp_err_t ret = httpd_resp_send(req, s, HTTPD_RESP_USE_STRLEN);
