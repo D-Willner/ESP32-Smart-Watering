@@ -8,10 +8,10 @@ IOT project built in C for ESP32 microcontrollers using the ESP IDF framework.
 
 The following two images show the web interface accessed from a phone browser.
 
-<center>
-<img src=".github/mobile_main.jpg" height="400" alt="Main page"/>&ensp;&ensp;&ensp;
+<p align="center">
+<img src=".github/mobile_main.jpg" height="400" alt="Main page"/>
 <img src=".github/mobile_config.jpg" height="400" alt="Config page"/>
-</center>
+</p>
 
 ### Technical Overview
 The program consists of different FreeRTOS tasks:
@@ -34,9 +34,9 @@ The HTTP API is then given by the following table.
 The project expects a pump which can be controlled by a simple high or low GPIO output, as well as a moisture sensor, which delivers an analog output. Additionally a button for manual control of the pump can be used. 
 An example circuit that can be used for the standard configuration of the program is shown in the following diagram.
 
-<center>
+<p align="center">
 <img src=".github/circuit.png" height="300" alt="Circuit"/>
-</center>
+</p>
 
 
 ### Usage Instructions
@@ -51,9 +51,9 @@ Then the project must be configured either by using
 `idf.py menuconfig`
 
 or by using the graphical version of menuconfig, that is included in the VSCode plugin shown in the following image.
-<center>
+<p align="center">
 <img src=".github/Kconfig.png" height="500" alt="KConfig page"/>
-</center>
+</p>
 
 Most settings can be left unchanged, but *WiFi SSID* and *WiFi Password* must be set in the menu *Network Configuration*. Additionally to make the numbers reported in the web interface accurate the two constants *K* and *L* in *Pump Configuration* need to be set using the terminal version of menuconfig (use "f" for help on their meaning).  
 Lastly the project can be build and flashed to an ESP32. A quick test can be done by accessing the web interface.
