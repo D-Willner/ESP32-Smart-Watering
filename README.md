@@ -1,6 +1,6 @@
 ## ESP32 Smart Watering
 IOT project built in C for ESP32 microcontrollers using the ESP IDF framework.
-* Automatically waters your plant based on soil moisture. Also allows for manual control using a button.
+* Automatically waters your plant by controlling a pump based on measured soil moisture. Also allows for manual control using a button.
 * Webinterface with mDNS to allow easy access from home network. Allows viewing current soil moisture, manually triggering watering and configuring the program settings. 
 * HTTP API to allow other programs to interact with the ESP32. 
 * Settings are stored in non volatile memory and remain after restarting the microcontroller.
