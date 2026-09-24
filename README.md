@@ -13,6 +13,13 @@ The following two images show the web interface accessed from a phone browser.
 <img src=".github/mobile_config.jpg" height="400" alt="Config page"/>
 </p>
 
+The project expects a pump which can be controlled by a simple high or low GPIO output, as well as a moisture sensor, which delivers an analog output. Additionally a button for manual control of the pump can be used. 
+An example circuit that can be used for the standard configuration of the program is shown in the following diagram.
+
+<p align="center">
+<img src=".github/circuit.png" height="300" alt="Circuit"/>
+</p>
+
 ### Technical Overview
 The program consists of different FreeRTOS tasks:
 * <b>Measurement:</b> Initializes the manual control button's GPIO settings and registers its ISR. Then initializes the ADC unit and starts a task, that measures the soil moisture in predetermined intervalls. 
@@ -30,14 +37,6 @@ The HTTP API is then given by the following table.
 | /api/water  | POST   | Starts watering the plant for configured amount          |                                                                                   |
 | /api/config | GET    | Returns JSON with current program settings               | { "water_amount_ml: int, "trigger_humidity_pct: int, "rearm_humidity_pct": int }  |
 | /api/config | POST   | Adopts the settings in the transferred JSON              | { "water_amount_ml: int, "trigger_humidity_pct": int, "rearm_humidity_pct": int } |
-
-The project expects a pump which can be controlled by a simple high or low GPIO output, as well as a moisture sensor, which delivers an analog output. Additionally a button for manual control of the pump can be used. 
-An example circuit that can be used for the standard configuration of the program is shown in the following diagram.
-
-<p align="center">
-<img src=".github/circuit.png" height="300" alt="Circuit"/>
-</p>
-
 
 ### Usage Instructions
 To compile and flash this program you can use the ESP-IDF plugin for VSCode.

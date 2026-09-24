@@ -3,6 +3,7 @@
 #include <inttypes.h>
 
 void init_measurements();
+void start_measurements();
 
 void adc_read_task(void* vParameters);
 

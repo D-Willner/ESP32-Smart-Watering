@@ -14,6 +14,9 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     init_measurements();
-    init_watering();
+    init_watering_control();
+
+    start_measurements();
+    start_watering_control();
     start_http_server();
 }

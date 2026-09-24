@@ -21,17 +21,11 @@ static const char* TAG = "MEASUREMENT";
 
 static QueueHandle_t queue;
 
-void init_queue()
-{
-    queue = xQueueCreate(1,sizeof(uint16_t));
-    uint16_t val = UINT16_MAX;
-    xQueueOverwrite(queue,&val);
-}
-
+#ifdef CONFIG_ENABLE_WATERING_BUTTON
 void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTickCountFromISR())
 {
     uint8_t level = gpio_get_level(BUTTON_PIN);
-    BaseType_t prio;
+    BaseType_t prio = pdFALSE;
 
     #ifdef CONFIG_WATERING_BUTTON_MODE_WHILE_PRESSED
     if(level == 0){ // ie falling edge
@@ -65,17 +59,7 @@ void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTi
 
     if(prio == pdTRUE) portYIELD_FROM_ISR();
 }
-
-void init_button()
-{
-    gpio_reset_pin(BUTTON_PIN);
-    gpio_set_direction(BUTTON_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(BUTTON_PIN, GPIO_PULLUP_ONLY);
-
-    gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
-}
+#endif
 
 void adc_read_task(void* vParameters)
 {
@@ -94,7 +78,6 @@ void adc_read_task(void* vParameters)
     };
 
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &adc_oneshot_cfg));
-    char* TAG = "ADC TEST";
 
     while(1){
         int measurement;
@@ -121,16 +104,30 @@ uint16_t current_moisture()
 
 float current_moisture_pct()
 {
-    return ANALOGUE_MOISTURE_CONSTANT * current_moisture();
+    return analog_to_humidity_pct(current_moisture());
 }
 
 
 void init_measurements()
 {
 #ifdef CONFIG_ENABLE_WATERING_BUTTON
-    init_button();
+    gpio_reset_pin(BUTTON_PIN);
+    gpio_set_direction(BUTTON_PIN, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(BUTTON_PIN, GPIO_PULLUP_ONLY);
 #endif
 
-    init_queue();
+    queue = xQueueCreate(1,sizeof(uint16_t));
+    uint16_t val = UINT16_MAX;
+    xQueueOverwrite(queue,&val);
+}
+
+void start_measurements()
+{
+#ifdef CONFIG_ENABLE_WATERING_BUTTON
+    gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
+#endif
+
     xTaskCreate(adc_read_task, "ADC read task", 2024, NULL, 0, NULL);
 }

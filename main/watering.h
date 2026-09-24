@@ -4,8 +4,9 @@
 #include "freertos/FreeRTOS.h"
 #include "esp_log.h"
 
-//  Initializes and starts watering_task and pump_control_task
-void init_watering();
+//  Initialize and start watering_task and pump_control_task
+void init_watering_control(void);
+void start_watering_control(void);
 
 //  Decides when to water the plant
 void watering_task(void* vParameters);
@@ -42,7 +43,9 @@ void set_trigger_humidity(uint16_t val);
 
 void set_rearm_humidity(uint16_t val);
 
-void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val);
+esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val);
 
+uint16_t humidity_pct_to_analog(uint16_t humidity);
+float analog_to_humidity_pct(uint16_t val);
 
 #endif

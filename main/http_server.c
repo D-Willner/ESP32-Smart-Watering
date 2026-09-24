@@ -21,6 +21,9 @@
 #define WATER_TIME_CONSTANT CONFIG_WATER_TIME_CONSTANT
 #define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
 
+#define MAX_ML 1000
+#define MAX_BUFFER_SZ 1000
+
 static const char* TAG = "HTTP SERVER";
 
 // HTML web pages to serve 
@@ -84,8 +87,32 @@ static esp_err_t api_get_config_handler(httpd_req_t *req)
 static esp_err_t api_post_config_handler(httpd_req_t *req)
 {
     size_t len = req->content_len;
-    char* buffer = malloc(len);    //  check if too big maybe
-    httpd_req_recv(req, buffer, len);
+    if(len > MAX_BUFFER_SZ-1){
+        ESP_LOGE(TAG, "MESSAGE LENGTH TOO BIG: %i", len);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    char* buffer = malloc(len+1);   
+    if(buffer == NULL){
+        ESP_LOGE(TAG, "COULD NOT ALLOCATE BUFFER");
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+    buffer[len] = '\0';
+    uint16_t w = 0;
+    while(w < len){
+        int16_t temp = httpd_req_recv(req, buffer+w, len-w);
+        w += temp;
+        if(temp < 0){
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
+            free(buffer);
+            return ESP_FAIL;
+        }
+    }
 
     bool req_ok = true;
     cJSON* j = cJSON_Parse(buffer);
@@ -104,17 +131,26 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
         req_ok = false;
     }
 
-    int water_amount_ml = jwater_amount_ml->valueint;
-    float trigger_humidity_pct = jtrigger_humidity_pct->valuedouble;
-    float rearm_humidity_pct = jrearm_humidity_pct->valuedouble;
-
     if(req_ok){
-        httpd_resp_set_status(req, "204 No Content");
-        save_config(water_amount_ml * (1/WATER_TIME_CONSTANT), 
-            trigger_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT),
-            rearm_humidity_pct * (1/ANALOGUE_MOISTURE_CONSTANT));
+        int water_amount_ml = jwater_amount_ml->valueint;
+        int trigger_humidity_pct = jtrigger_humidity_pct->valueint;
+        int rearm_humidity_pct = jrearm_humidity_pct->valueint;
+
+        uint8_t fail = 0;
+        if(water_amount_ml > MAX_ML || water_amount_ml < 0) fail++;
+        if(trigger_humidity_pct > 100 || trigger_humidity_pct < 0) fail++;
+        if(rearm_humidity_pct > 100 || rearm_humidity_pct < 0) fail++;
+
+        if(fail > 0) httpd_resp_set_status(req, "422 Unprocessable Content");
+        else{
+            esp_err_t err = save_config(water_amount_ml * (1/WATER_TIME_CONSTANT), 
+            humidity_pct_to_analog(trigger_humidity_pct),
+            humidity_pct_to_analog(rearm_humidity_pct));
+
+            httpd_resp_set_status(req, err == ESP_OK ? "204 No Content" : "500 Internal Server Error");
+        }
     } else {
-        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_set_status(req, "422 Unprocessable Content");
     }
     esp_err_t ret = httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
 

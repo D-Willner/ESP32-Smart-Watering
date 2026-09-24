@@ -25,6 +25,7 @@
 
 #define WATER_TIME_CONSTANT CONFIG_WATER_TIME_CONSTANT
 #define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
+#define ANALOGUE_MOISTURE_OFFSET CONFIG_ANALOGUE_MOISTURE_OFFSET
 
 #define COMMAND_PUMP_START -1
 #define COMMAND_PUMP_STOP -2
@@ -37,36 +38,40 @@ static _Atomic uint16_t watering_trigger;
 static _Atomic uint16_t rearm_trigger;
 static atomic_bool watering;
 
-void init_watering()
+void init_watering_control()
 {
     gpio_reset_pin(PUMP_CONTROL_PIN);
-    gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_INPUT);
+    gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
 
     queue = xQueueCreate(1,sizeof(int32_t));
     watering = false;
+    pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
+    watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
+    rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
 
     nvs_handle_t handle;
     esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
-     if (err != ESP_OK) {
+    if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    }
+    } else{
+        uint16_t temp;
+        err = nvs_get_u16(handle, "pot", &temp);
+        if(!err) pump_on_time = temp;
+        err = nvs_get_u16(handle, "wt", &temp);
+        if(!err) watering_trigger = temp;
+        err = nvs_get_u16(handle, "rt", &temp);
+        if(!err) rearm_trigger = temp;
 
-    uint16_t temp;
-    err = nvs_get_u16(handle, "pot", &temp);
-    if(err) pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
-    else pump_on_time = temp;
-    err = nvs_get_u16(handle, "wt", &temp);
-    if(err) watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
-    else watering_trigger = temp;
-    err = nvs_get_u16(handle, "rt", &temp);
-    if(err) rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
-    else rearm_trigger = temp;
-    
-    ESP_LOGI(TAG, "Initialized with water: %i, trigger: %i, rearm: %i", 
+        ESP_LOGI(TAG, "Initialized with water: %i, trigger: %i, rearm: %i", 
         pump_on_time, watering_trigger, rearm_trigger);
 
-    nvs_close(handle);
+        nvs_close(handle);
+    }
 
+}
+
+void start_watering_control()
+{
     xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);
     xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, NULL);
 }
@@ -98,7 +103,7 @@ void pump_control_task(void* vParameters)
         else if(command > 0){
             watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
-            vTaskDelay(pdMS_TO_TICKS(pump_on_time));
+            vTaskDelay(pdMS_TO_TICKS(command));
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
             watering = false;
         } else if(command == -1){
@@ -115,51 +120,40 @@ void pump_control_task(void* vParameters)
 
 esp_err_t start_pump()
 {
-    int32_t command;
-    if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
-
-    command = COMMAND_PUMP_START;
-    return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
+    int32_t command = COMMAND_PUMP_START;
+    return xQueueSendToBack(queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t start_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 {
-    int32_t command;
-    if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
-
-    command = COMMAND_PUMP_START;
-    return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdPASS ? ESP_OK : ESP_FAIL;
+    int32_t command = COMMAND_PUMP_START;
+    return xQueueSendToBackFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t stop_pump()
 {
     int32_t command = COMMAND_PUMP_STOP;
-    return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
+    return xQueueOverwrite(queue, &command) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 
 esp_err_t stop_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 {
     int32_t command = COMMAND_PUMP_STOP;
-    return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdPASS ? ESP_OK : ESP_FAIL;
+    return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t run_pump(uint16_t time_ms)
 {
-    int32_t command;
-    //if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
 
-    command = (int32_t)time_ms;
-    return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
+    int32_t command = (int32_t)time_ms;
+    return xQueueSendToBack(queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWoken)
 {
-    int32_t command;
-    if(xQueuePeekFromISR(queue, &command) != pdPASS) return ESP_FAIL;
-
-    command = (int32_t)time_ms;
-    return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdPASS ? ESP_OK : ESP_FAIL;
+    int32_t command = (int32_t)time_ms;
+    return xQueueSendToBackFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 uint16_t get_pump_on_time()
@@ -174,12 +168,12 @@ uint16_t get_pump_amount()
 
 float get_trigger_humidity_pct()
 {
-    return ANALOGUE_MOISTURE_CONSTANT * watering_trigger;
+    return analog_to_humidity_pct(watering_trigger);
 }
 
 float get_rearm_humidity_pct()
 {
-    return ANALOGUE_MOISTURE_CONSTANT * rearm_trigger;
+    return analog_to_humidity_pct(rearm_trigger);
 }
 
 bool is_watering()
@@ -202,7 +196,17 @@ void set_rearm_humidity(uint16_t val)
     rearm_trigger = val;
 }
 
-void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val)
+uint16_t humidity_pct_to_analog(uint16_t humidity)
+{
+    return (humidity * (1/ANALOGUE_MOISTURE_CONSTANT)) + ANALOGUE_MOISTURE_OFFSET;
+}
+
+float analog_to_humidity_pct(uint16_t val)
+{
+    return ANALOGUE_MOISTURE_CONSTANT * (val - ANALOGUE_MOISTURE_OFFSET);
+}
+
+esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val)
 {
     pump_on_time = time_ms;
     watering_trigger = watering_trigger_val;
@@ -212,18 +216,35 @@ void save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm
     esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
      if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-        return;
+        return ESP_FAIL;
     }
 
+    uint8_t fail = 0;
     err = nvs_set_u16(handle, "pot", time_ms);
-    if(err) ESP_LOGE(TAG, "Could not save pump_on_time to NVS: (%s)", esp_err_to_name(err)); 
+    if(err) {
+        ESP_LOGE(TAG, "Could not save pump_on_time to NVS: (%s)", esp_err_to_name(err)); 
+        fail++;
+    }
     err = nvs_set_u16(handle, "wt", watering_trigger_val);
-    if(err) ESP_LOGE(TAG, "Could not save watering_trigge to NVS: (%s)", esp_err_to_name(err)); 
+    if(err) {
+        ESP_LOGE(TAG, "Could not save watering_trigge to NVS: (%s)", esp_err_to_name(err)); 
+        fail++;
+    }
     err = nvs_set_u16(handle, "rt", rearm_trigger_val);
-    if(err) ESP_LOGE(TAG, "Could not save rearm_trigger to NVS: (%s)", esp_err_to_name(err)); 
+    if(err) {
+        ESP_LOGE(TAG, "Could not save rearm_trigger to NVS: (%s)", esp_err_to_name(err)); 
+        fail++;
+    }
 
-    err = nvs_commit(handle);
-    if(err) ESP_LOGE(TAG, "Could not save to NVS: (%s)", esp_err_to_name(err));
+    if(fail == 0){
+        err = nvs_commit(handle);
+        if(err) {
+            ESP_LOGE(TAG, "Could not save to NVS: (%s)", esp_err_to_name(err));
+            fail++;
+        }
+    }
+    
 
     nvs_close(handle);
+    return fail == 0 ? ESP_OK : ESP_FAIL;
 }

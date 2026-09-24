@@ -137,7 +137,14 @@ menu "Pump Configuration"
         default 0.05
         help
             This constant needs to fullfill:
-            moisture[%] = L * ADC_signal_level
+            moisture[%] = L * (ADC_signal_level - A)
+
+    config ANALOGUE_MOISTURE_OFFSET
+        float "Analogue moisture offset A"
+        default 0
+        help
+            This constant needs to fullfill:
+            moisture[%] = L * (ADC_signal_level - A)
 endmenu
 
 
