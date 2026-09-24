@@ -115,9 +115,10 @@ void pump_control_task(void* vParameters)
 
 esp_err_t start_pump()
 {
-    if(xQueuePeek(queue, NULL, 0) != pdPASS) return ESP_FAIL;
+    int32_t command;
+    if(xQueuePeek(queue, &command, 0) != pdPASS) return ESP_FAIL;
 
-    int32_t command = COMMAND_PUMP_START;
+    command = COMMAND_PUMP_START;
     return xQueueOverwrite(queue, &command) == pdPASS ? ESP_OK : ESP_FAIL;
 }
 

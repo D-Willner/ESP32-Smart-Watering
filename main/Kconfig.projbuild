@@ -18,7 +18,7 @@ endmenu
 
 menu "ADC Configuration"
     config ADC_POLLING_INTERVALL
-        int "ADC polling intervall[ms]"
+        int "ADC polling intervall [ms]"
         default 1000
         help
             Time between reads of the moisture sensor
@@ -82,7 +82,7 @@ menu "Manual Watering Button"
 
     config WATER_BUTTON_GPIO_PIN
         depends on ENABLE_WATERING_BUTTON
-        int "Manual watering button GPIO PIN number"
+        int "Manual watering button GPIO PIN"
         default 26
         help
             GPIO PIN number to which the button for manual control of watering is connected to
@@ -90,7 +90,7 @@ endmenu
 
 menu "Pump Configuration"
     config MOISTURE_CHECK_INTERVALL
-        int "Moisture check intervall[ms]"
+        int "Moisture check intervall [ms]"
         default 1000
         help
             Time between checks of soil moisture, that control whether the pump is started.
@@ -108,7 +108,7 @@ menu "Pump Configuration"
             When false the pump turns on when the pump control pin is set to high. Setting this inverts the behaviour.
 
     config DEFAULT_PUMP_ON_TIME
-        int "Default pump on time"
+        int "Default pump on time [ms]"
         default 500
         help
             Time in ms for which the pump turns on when command to water is given.
