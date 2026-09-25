@@ -15,47 +15,63 @@
 #define ADC_POLLING_INTERVALL CONFIG_ADC_POLLING_INTERVALL
 #define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
 
+#define BUTTON_DEBOUNCE_TICKS pdMS_TO_TICKS(50)
+
 static const char* TAG = "MEASUREMENT";
 
 QueueHandle_t moisture_queue;
 
 #ifdef CONFIG_ENABLE_WATERING_BUTTON
-void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTickCountFromISR())
+static TaskHandle_t button_task_handle;
+static int button_stable_level;
+
+static void button_ISR(void*)
 {
-    uint8_t level = gpio_get_level(BUTTON_PIN);
-    BaseType_t prio = pdFALSE;
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    vTaskNotifyGiveFromISR(button_task_handle, &higher_priority_task_woken);
+    if(higher_priority_task_woken == pdTRUE) portYIELD_FROM_ISR();
+}
 
-    #ifdef CONFIG_WATERING_BUTTON_MODE_WHILE_PRESSED
-    if(level == 0){ // ie falling edge
-        #ifndef CONFIG_WATERING_BUTTON_INVERT
-            start_pump_fromISR(&prio);
-        #else
-            stop_pump_fromISR(&prio);
-        #endif
-    } else {
-        #ifndef CONFIG_WATERING_BUTTON_INVERT
-            stop_pump_fromISR(&prio);
-        #else
-            start_pump_fromISR(&prio);
+static void button_task(void* pvParameters)
+{
+    while(1){
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        while(ulTaskNotifyTake(pdTRUE, BUTTON_DEBOUNCE_TICKS) != 0){
+            // Restart the quiet period after every raw edge.
+        }
+
+        int level = gpio_get_level(BUTTON_PIN);
+        if(level == button_stable_level) continue;
+
+        button_stable_level = level;
+        ESP_LOGI(TAG, "Button settled %s", level ? "HIGH" : "LOW");
+
+        #ifdef CONFIG_WATERING_BUTTON_MODE_WHILE_PRESSED
+        if(level == 0){ // falling edge
+            #ifndef CONFIG_WATERING_BUTTON_INVERT
+                start_pump();
+            #else
+                stop_pump();
+            #endif
+        } else { // rising edge
+            #ifndef CONFIG_WATERING_BUTTON_INVERT
+                stop_pump();
+            #else
+                start_pump();
+            #endif
+        }
+        #elifdef CONFIG_WATERING_BUTTON_MODE_SINGLE
+        if(level == 0){ // falling edge
+            #ifndef CONFIG_WATERING_BUTTON_INVERT
+                run_pump(get_pump_on_time());
+            #endif
+        } else { // rising edge
+            #ifdef CONFIG_WATERING_BUTTON_INVERT
+                run_pump(get_pump_on_time());
+            #endif
+        }
         #endif
     }
-    #elifdef CONFIG_WATERING_BUTTON_MODE_SINGLE
-    if(level == 0){ // ie falling edge
-        #ifndef CONFIG_WATERING_BUTTON_INVERT
-            run_pump_fromISR(get_pump_on_time(), &prio);
-        #else
-
-        #endif
-    } else {
-        #ifndef CONFIG_WATERING_BUTTON_INVERT
-
-        #else
-            run_pump_fromISR(get_pump_on_time(), &prio);
-        #endif
-    }
-    #endif
-
-    if(prio == pdTRUE) portYIELD_FROM_ISR();
 }
 #endif
 
@@ -82,7 +98,7 @@ static void adc_read_task(void* pvParameters)
         int measurement;
         if(adc_oneshot_read(adc_handle, ADC_CHANNEL, &measurement) == ESP_OK){
             uint16_t adc_measurement = (uint16_t)measurement;
-            ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
+            //ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
             xQueueOverwrite(moisture_queue, &adc_measurement);
             xTaskNotify(watering_task_handle, 0, eNoAction);
         } else{
@@ -124,9 +140,15 @@ void init_measurements()
 void start_measurements(TaskHandle_t watering_task_handle)
 {
 #ifdef CONFIG_ENABLE_WATERING_BUTTON
-    gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
+    button_stable_level = gpio_get_level(BUTTON_PIN);
+    ESP_ERROR_CHECK(xTaskCreate(button_task, "Button task", 2048, NULL, 3,
+                                &button_task_handle) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE));
+    ESP_ERROR_CHECK(gpio_install_isr_service(0));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL));
+    if(gpio_get_level(BUTTON_PIN) != button_stable_level){
+        xTaskNotifyGive(button_task_handle);
+    }
 #endif
 
     xTaskCreate(adc_read_task, "ADC read task", 2024, watering_task_handle, 0, NULL);

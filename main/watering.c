@@ -43,7 +43,7 @@ static void watering_task(void* pvParameters)
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         moisture = current_moisture();
-        ESP_LOGI(TAG, "Watering task received value %i", moisture);
+        //ESP_LOGI(TAG, "Watering task received value %i", moisture);
 
         if(armed && moisture <= watering_trigger){
             ESP_LOGI(TAG, "Starting pump because humidity is %i", moisture);
@@ -71,11 +71,11 @@ static void pump_control_task(void* vParameters)
             vTaskDelay(pdMS_TO_TICKS(command));
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
             watering = false;
-        } else if(command == -1){
+        } else if(command == COMMAND_PUMP_START){
             ESP_LOGI(TAG, "Pump started");
             watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
-        } else if(command == -2){
+        } else if(command == COMMAND_PUMP_STOP){
             ESP_LOGI(TAG, "Pump stopped");
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
             watering = false;
