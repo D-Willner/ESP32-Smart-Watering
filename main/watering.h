@@ -6,7 +6,7 @@
 
 //  Initialize and start watering_task and pump_control_task
 void init_watering_control(void);
-void start_watering_control(void);
+void start_watering_control(TaskHandle_t* watering_task_handle_out);
 
 //  Decides when to water the plant
 void watering_task(void* vParameters);

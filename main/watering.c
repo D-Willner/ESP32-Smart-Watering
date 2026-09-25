@@ -21,8 +21,6 @@
 #define PUMP_OFF_LEVEL 1
 #endif
 
-#define MOISTURE_CHECK_INTERVALL CONFIG_MOISTURE_CHECK_INTERVALL
-
 #define WATER_TIME_CONSTANT CONFIG_WATER_TIME_CONSTANT
 #define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
 #define ANALOGUE_MOISTURE_OFFSET CONFIG_ANALOGUE_MOISTURE_OFFSET
@@ -32,7 +30,7 @@
 
 static const char* TAG = "WATERING";
 
-static QueueHandle_t queue;
+static QueueHandle_t command_queue;
 static _Atomic uint16_t pump_on_time;
 static _Atomic uint16_t watering_trigger;
 static _Atomic uint16_t rearm_trigger;
@@ -43,7 +41,7 @@ void init_watering_control()
     gpio_reset_pin(PUMP_CONTROL_PIN);
     gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
 
-    queue = xQueueCreate(1,sizeof(int32_t));
+    command_queue = xQueueCreate(1,sizeof(int32_t));
     watering = false;
     pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
     watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
@@ -70,25 +68,29 @@ void init_watering_control()
 
 }
 
-void start_watering_control()
+void start_watering_control(TaskHandle_t* watering_task_handle_out)
 {
-    xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);
-    xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, NULL);
+    xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);   // Pump control should be highest priority
+    xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, watering_task_handle_out);
 }
 
-void watering_task(void* vParameters)
+void watering_task(void* pvParameters)
 {
     bool armed = true;
+    uint16_t moisture;
     while(1){
-        uint16_t moisture = current_moisture();
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if(!xQueuePeek(moisture_queue, &moisture, 0)) continue;
+        ESP_LOGI(TAG, "Watering task received value %i", moisture);
+
         if(armed && moisture <= watering_trigger){
+            ESP_LOGI(TAG, "Starting pump because humidity is %i", moisture);
             run_pump(pump_on_time);
             armed = false;
         } else if(!armed && moisture > rearm_trigger){
+            ESP_LOGI(TAG, "Rearming pump because humidity is %i", moisture);
             armed = true;
         }
-
-        vTaskDelay(pdMS_TO_TICKS(MOISTURE_CHECK_INTERVALL));
     }
 }
 
@@ -96,20 +98,23 @@ void pump_control_task(void* vParameters)
 {
     while(1){
         int32_t command;
-        BaseType_t ret = xQueueReceive(queue, &command, portMAX_DELAY);
+        BaseType_t ret = xQueueReceive(command_queue, &command, portMAX_DELAY);
         if(ret == errQUEUE_EMPTY) continue; // should not happen
 
         if(command == 0) continue;
         else if(command > 0){
+            ESP_LOGI(TAG, "Pump will be run for %i ms", command);
             watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
             vTaskDelay(pdMS_TO_TICKS(command));
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
             watering = false;
         } else if(command == -1){
+            ESP_LOGI(TAG, "Pump started");
             watering = true;
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
         } else if(command == -2){
+            ESP_LOGI(TAG, "Pump stopped");
             gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
             watering = false;
         } else {
@@ -121,39 +126,39 @@ void pump_control_task(void* vParameters)
 esp_err_t start_pump()
 {
     int32_t command = COMMAND_PUMP_START;
-    return xQueueSendToBack(queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueSendToBack(command_queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t start_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 {
     int32_t command = COMMAND_PUMP_START;
-    return xQueueSendToBackFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueSendToBackFromISR(command_queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t stop_pump()
 {
     int32_t command = COMMAND_PUMP_STOP;
-    return xQueueOverwrite(queue, &command) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueOverwrite(command_queue, &command) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 
 esp_err_t stop_pump_fromISR(BaseType_t* pxHigherPriorityTaskWoken)
 {
     int32_t command = COMMAND_PUMP_STOP;
-    return xQueueOverwriteFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueOverwriteFromISR(command_queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t run_pump(uint16_t time_ms)
 {
 
     int32_t command = (int32_t)time_ms;
-    return xQueueSendToBack(queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueSendToBack(command_queue, &command, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t run_pump_fromISR(uint16_t time_ms, BaseType_t* pxHigherPriorityTaskWoken)
 {
     int32_t command = (int32_t)time_ms;
-    return xQueueSendToBackFromISR(queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
+    return xQueueSendToBackFromISR(command_queue, &command, pxHigherPriorityTaskWoken) == pdTRUE ? ESP_OK : ESP_FAIL;
 }
 
 uint16_t get_pump_on_time()
@@ -245,6 +250,8 @@ esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t 
     }
     
 
+    if(!fail) ESP_LOGI(TAG, "Accepted and saved new settings: pump_on_time: %i, watering_trigger_val: %i, rearm_trigger_val: %i", 
+        pump_on_time, watering_trigger, rearm_trigger);
     nvs_close(handle);
     return fail == 0 ? ESP_OK : ESP_FAIL;
 }

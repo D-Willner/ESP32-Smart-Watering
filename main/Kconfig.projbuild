@@ -89,11 +89,6 @@ menu "Manual Watering Button"
 endmenu
 
 menu "Pump Configuration"
-    config MOISTURE_CHECK_INTERVALL
-        int "Moisture check intervall [ms]"
-        default 1000
-        help
-            Time between checks of soil moisture, that control whether the pump is started.
 
     config PUMP_CONTROL_PIN
         int "Pump Control Pin"

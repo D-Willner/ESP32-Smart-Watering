@@ -16,7 +16,8 @@ void app_main(void)
     init_measurements();
     init_watering_control();
 
-    start_measurements();
-    start_watering_control();
+    TaskHandle_t watering_task_handle;
+    start_watering_control(&watering_task_handle);
+    start_measurements(watering_task_handle);
     start_http_server();
 }

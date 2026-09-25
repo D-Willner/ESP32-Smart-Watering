@@ -1,6 +1,4 @@
 #include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/mcpwm_timer.h"
 #include "esp_log.h"
@@ -19,7 +17,7 @@
 
 static const char* TAG = "MEASUREMENT";
 
-static QueueHandle_t queue;
+QueueHandle_t moisture_queue;
 
 #ifdef CONFIG_ENABLE_WATERING_BUTTON
 void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTickCountFromISR())
@@ -61,8 +59,9 @@ void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTi
 }
 #endif
 
-void adc_read_task(void* vParameters)
+void adc_read_task(void* pvParameters)
 {
+    TaskHandle_t watering_task_handle = *((TaskHandle_t*)pvParameters);
     adc_oneshot_unit_handle_t adc_handle;
     adc_oneshot_unit_init_cfg_t adc_unit_init_cfg = {
         .unit_id = ADC_UNIT_1,
@@ -84,7 +83,8 @@ void adc_read_task(void* vParameters)
         if(adc_oneshot_read(adc_handle, ADC_CHANNEL, &measurement) == ESP_OK){
             uint16_t adc_measurement = (uint16_t)measurement;
             ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
-            xQueueOverwrite(queue, &adc_measurement);
+            xQueueOverwrite(moisture_queue, &adc_measurement);
+            xTaskNotify(watering_task_handle, 0, eNoAction);
         } else{
             ESP_LOGE(TAG, "Could not read from ADC");
         }
@@ -96,7 +96,7 @@ void adc_read_task(void* vParameters)
 uint16_t current_moisture()
 {
     uint16_t current;
-    BaseType_t ret = xQueuePeek(queue,&current,0);
+    BaseType_t ret = xQueuePeek(moisture_queue,&current,0);
 
     if(ret != pdPASS) return UINT16_MAX;
     else return current;
@@ -116,12 +116,12 @@ void init_measurements()
     gpio_set_pull_mode(BUTTON_PIN, GPIO_PULLUP_ONLY);
 #endif
 
-    queue = xQueueCreate(1,sizeof(uint16_t));
+    moisture_queue = xQueueCreate(1,sizeof(uint16_t));
     uint16_t val = UINT16_MAX;
-    xQueueOverwrite(queue,&val);
+    xQueueOverwrite(moisture_queue,&val);
 }
 
-void start_measurements()
+void start_measurements(TaskHandle_t watering_task_handle)
 {
 #ifdef CONFIG_ENABLE_WATERING_BUTTON
     gpio_set_intr_type(BUTTON_PIN, GPIO_INTR_ANYEDGE);
@@ -129,5 +129,5 @@ void start_measurements()
     gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
 #endif
 
-    xTaskCreate(adc_read_task, "ADC read task", 2024, NULL, 0, NULL);
+    xTaskCreate(adc_read_task, "ADC read task", 2024, &watering_task_handle, 0, NULL);
 }
