@@ -106,7 +106,7 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
     while(w < len){
         int16_t temp = httpd_req_recv(req, buffer+w, len-w);
         w += temp;
-        if(temp < 0){
+        if(temp <= 0){
             httpd_resp_set_status(req, "500 Internal Server Error");
             httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
             free(buffer);
@@ -138,7 +138,7 @@ static esp_err_t api_post_config_handler(httpd_req_t *req)
 
         uint8_t fail = 0;
         if(water_amount_ml > MAX_ML || water_amount_ml < 0) fail++;
-        if(trigger_humidity_pct > 100 || trigger_humidity_pct < 0) fail++;
+        if(trigger_humidity_pct > 100 || trigger_humidity_pct < 0 || trigger_humidity_pct >= rearm_humidity_pct) fail++;
         if(rearm_humidity_pct > 100 || rearm_humidity_pct < 0) fail++;
 
         if(fail > 0) httpd_resp_set_status(req, "422 Unprocessable Content");

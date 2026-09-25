@@ -61,7 +61,7 @@ void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTi
 
 void adc_read_task(void* pvParameters)
 {
-    TaskHandle_t watering_task_handle = *((TaskHandle_t*)pvParameters);
+    TaskHandle_t watering_task_handle = (TaskHandle_t)pvParameters;
     adc_oneshot_unit_handle_t adc_handle;
     adc_oneshot_unit_init_cfg_t adc_unit_init_cfg = {
         .unit_id = ADC_UNIT_1,
@@ -129,5 +129,5 @@ void start_measurements(TaskHandle_t watering_task_handle)
     gpio_isr_handler_add(BUTTON_PIN, button_ISR, NULL);
 #endif
 
-    xTaskCreate(adc_read_task, "ADC read task", 2024, &watering_task_handle, 0, NULL);
+    xTaskCreate(adc_read_task, "ADC read task", 2024, watering_task_handle, 0, NULL);
 }

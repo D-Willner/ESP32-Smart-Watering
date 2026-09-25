@@ -39,6 +39,7 @@ static atomic_bool watering;
 void init_watering_control()
 {
     gpio_reset_pin(PUMP_CONTROL_PIN);
+    gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
     gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
 
     command_queue = xQueueCreate(1,sizeof(int32_t));
