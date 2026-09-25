@@ -59,7 +59,7 @@ void button_ISR(void*)  // add debounce with time checking maybe (use xTaskGetTi
 }
 #endif
 
-void adc_read_task(void* pvParameters)
+static void adc_read_task(void* pvParameters)
 {
     TaskHandle_t watering_task_handle = (TaskHandle_t)pvParameters;
     adc_oneshot_unit_handle_t adc_handle;

@@ -8,12 +8,6 @@
 void init_watering_control(void);
 void start_watering_control(TaskHandle_t* watering_task_handle_out);
 
-//  Decides when to water the plant
-void watering_task(void* vParameters);
-
-//  Controls the pump that waters the plant
-void pump_control_task(void* vParameters);
-
 //  interacts with pump_control_task
 //  only run_pump or both the others may be used at the same time
 //  if a command to the pump is currently queued, start_pump and run_pump return ESP_FAIL otherwise ESP_OK

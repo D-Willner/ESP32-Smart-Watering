@@ -36,52 +36,13 @@ static _Atomic uint16_t watering_trigger;
 static _Atomic uint16_t rearm_trigger;
 static atomic_bool watering;
 
-void init_watering_control()
-{
-    gpio_reset_pin(PUMP_CONTROL_PIN);
-    gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
-    gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
-
-    command_queue = xQueueCreate(1,sizeof(int32_t));
-    watering = false;
-    pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
-    watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
-    rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
-
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    } else{
-        uint16_t temp;
-        err = nvs_get_u16(handle, "pot", &temp);
-        if(!err) pump_on_time = temp;
-        err = nvs_get_u16(handle, "wt", &temp);
-        if(!err) watering_trigger = temp;
-        err = nvs_get_u16(handle, "rt", &temp);
-        if(!err) rearm_trigger = temp;
-
-        ESP_LOGI(TAG, "Initialized with water: %i, trigger: %i, rearm: %i", 
-        pump_on_time, watering_trigger, rearm_trigger);
-
-        nvs_close(handle);
-    }
-
-}
-
-void start_watering_control(TaskHandle_t* watering_task_handle_out)
-{
-    xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);   // Pump control should be highest priority
-    xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, watering_task_handle_out);
-}
-
-void watering_task(void* pvParameters)
+static void watering_task(void* pvParameters)
 {
     bool armed = true;
     uint16_t moisture;
     while(1){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        if(!xQueuePeek(moisture_queue, &moisture, 0)) continue;
+        moisture = current_moisture();
         ESP_LOGI(TAG, "Watering task received value %i", moisture);
 
         if(armed && moisture <= watering_trigger){
@@ -95,7 +56,7 @@ void watering_task(void* pvParameters)
     }
 }
 
-void pump_control_task(void* vParameters)
+static void pump_control_task(void* vParameters)
 {
     while(1){
         int32_t command;
@@ -255,4 +216,43 @@ esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t 
         pump_on_time, watering_trigger, rearm_trigger);
     nvs_close(handle);
     return fail == 0 ? ESP_OK : ESP_FAIL;
+}
+
+void init_watering_control()
+{
+    gpio_reset_pin(PUMP_CONTROL_PIN);
+    gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+    gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
+
+    command_queue = xQueueCreate(1,sizeof(int32_t));
+    watering = false;
+    pump_on_time = CONFIG_DEFAULT_PUMP_ON_TIME;
+    watering_trigger = CONFIG_DEFAULT_WATERING_TRIGGER;
+    rearm_trigger = CONFIG_DEFAULT_REARM_TRIGGER;
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("config", NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    } else{
+        uint16_t temp;
+        err = nvs_get_u16(handle, "pot", &temp);
+        if(!err) pump_on_time = temp;
+        err = nvs_get_u16(handle, "wt", &temp);
+        if(!err) watering_trigger = temp;
+        err = nvs_get_u16(handle, "rt", &temp);
+        if(!err) rearm_trigger = temp;
+
+        ESP_LOGI(TAG, "Initialized with water: %i, trigger: %i, rearm: %i", 
+        pump_on_time, watering_trigger, rearm_trigger);
+
+        nvs_close(handle);
+    }
+
+}
+
+void start_watering_control(TaskHandle_t* watering_task_handle_out)
+{
+    xTaskCreate(pump_control_task, "Pump Control Task", 2024, NULL, 5, NULL);   // Pump control should be highest priority
+    xTaskCreate(watering_task, "Watering Task", 2024, NULL, 4, watering_task_handle_out);
 }
