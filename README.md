@@ -33,7 +33,7 @@ The program consists of different FreeRTOS tasks:
 * <b>Watering:</b> Task which periodically checks whether the pump should be started based on current soil moisture. It also controls the program configuration.
 * <b>HTTP Server:</b> Initializes by connecting to Wifi and then starts an esp_http_server. The server registers handlers for the API and the HTML pages, which are embedded as binary data using the ESP32 build system
 
-The inter task communication is handled using atomic variables and queues.  
+The inter task communication is handled using atomic variables, notifications and queues.  
 With default settings, the HTTP server can be accessed by the URL "http://watering.local".
 The HTTP API is described by the following table.
 
