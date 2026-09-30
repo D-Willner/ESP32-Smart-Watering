@@ -31,6 +31,20 @@ extern const char html_page[] asm("_binary_index_html_start");
 
 extern const char config_page[] asm("_binary_config_html_start"); 
 
+int int_pct_cutoff(int val)
+{
+    if(val > 100) return 100;
+    else if (val<0) return 0;
+    else return val;
+}
+
+float float_pct_cutoff(float val)
+{
+    if(val > 100) return 100;
+    else if (val < 0) return 0;
+    else return val;
+}
+
 // API handlers
 static esp_err_t api_get_status_handler(httpd_req_t *req)
 {
@@ -39,7 +53,7 @@ static esp_err_t api_get_status_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
     cJSON* j = cJSON_CreateObject();
-    cJSON_AddNumberToObject(j, "humidity_pct", current_moisture_pct());
+    cJSON_AddNumberToObject(j, "humidity_pct", float_pct_cutoff(current_moisture_pct()));
     cJSON_AddBoolToObject(j, "watering", is_watering());
     char *s = cJSON_Print(j);
 
@@ -70,8 +84,8 @@ static esp_err_t api_get_config_handler(httpd_req_t *req)
 
     cJSON* j = cJSON_CreateObject();
     cJSON_AddNumberToObject(j, "water_amount_ml", get_pump_amount());
-    cJSON_AddNumberToObject(j, "trigger_humidity_pct", (int)get_trigger_humidity_pct());
-    cJSON_AddNumberToObject(j, "rearm_humidity_pct", (int)get_rearm_humidity_pct());
+    cJSON_AddNumberToObject(j, "trigger_humidity_pct", (int)float_pct_cutoff(get_trigger_humidity_pct()));
+    cJSON_AddNumberToObject(j, "rearm_humidity_pct", (int)float_pct_cutoff(get_rearm_humidity_pct()));
     char *s = cJSON_Print(j);
 
     ESP_LOGI(TAG, "water: %i, trigger: %i, rearm: %i", 
