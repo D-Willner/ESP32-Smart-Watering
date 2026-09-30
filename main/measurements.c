@@ -98,7 +98,7 @@ static void adc_read_task(void* pvParameters)
         int measurement;
         if(adc_oneshot_read(adc_handle, ADC_CHANNEL, &measurement) == ESP_OK){
             uint16_t adc_measurement = (uint16_t)measurement;
-            //ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
+            ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_2, ADC_CHANNEL, measurement);
             xQueueOverwrite(moisture_queue, &adc_measurement);
             xTaskNotify(watering_task_handle, 0, eNoAction);
         } else{

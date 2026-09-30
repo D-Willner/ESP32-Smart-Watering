@@ -39,7 +39,7 @@ void set_rearm_humidity(uint16_t val);
 
 esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t rearm_trigger_val);
 
-uint16_t humidity_pct_to_analog(uint16_t humidity);
+uint16_t humidity_pct_to_analog(float humidity);
 float analog_to_humidity_pct(uint16_t val);
 
 #endif

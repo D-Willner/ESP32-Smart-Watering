@@ -102,6 +102,19 @@ menu "Pump Configuration"
         help
             When false the pump turns on when the pump control pin is set to high. Setting this inverts the behaviour.
 
+    config USE_PWM
+        bool "Use PWM"
+        default n
+        help
+            Use PWM for pump motor control
+
+    config PWM_DUTY
+        depends on USE_PWM
+        int "PWM Duty[%]"
+        default 30
+        help
+            PWM duty when pump motor is on
+
     config DEFAULT_PUMP_ON_TIME
         int "Default pump on time [ms]"
         default 500
@@ -119,6 +132,12 @@ menu "Pump Configuration"
         default 2000
         help
             After crossing this analog signal level the pump will again water when falling under the watering trigger level.
+
+    config ANALOGUE_MOISTURE_INVERTED
+        bool "Analogue moisture inverted"
+        default n 
+        help
+            If this constant is set, a higher soil humidity corresponds to a lower ADC value (ie L < 0)
 
     config WATER_TIME_CONSTANT
         float "Water time constant K"

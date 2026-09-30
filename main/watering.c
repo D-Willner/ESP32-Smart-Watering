@@ -1,17 +1,28 @@
 #include <stdio.h>
 #include <stdatomic.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/mcpwm_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
+#include "driver/ledc.h"
 #include "sdkconfig.h"
 
 #include "watering.h"
 #include "measurements.h"
 
 #define PUMP_CONTROL_PIN CONFIG_PUMP_CONTROL_PIN
+
+#ifdef CONFIG_USE_PWM
+#define PWM_PIN 25 // TODO: Set to 
+#define PWM_CHANNEL LEDC_CHANNEL_0
+#define PWM_DUTY CONFIG_PWM_DUTY
+#define PWM_RESOLUTION LEDC_TIMER_13_BIT
+#endif
+
+//#define CONFIG_PWM_FADE
 
 #ifndef CONFIG_PUMP_CONTROL_INVERT
 #define PUMP_ON_LEVEL 1
@@ -24,6 +35,8 @@
 #define WATER_TIME_CONSTANT CONFIG_WATER_TIME_CONSTANT
 #define ANALOGUE_MOISTURE_CONSTANT CONFIG_ANALOGUE_MOISTURE_CONSTANT
 #define ANALOGUE_MOISTURE_OFFSET CONFIG_ANALOGUE_MOISTURE_OFFSET
+
+#define ANALOGUE_MOISTURE_INVERTED
 
 #define COMMAND_PUMP_START -1
 #define COMMAND_PUMP_STOP -2
@@ -45,6 +58,7 @@ static void watering_task(void* pvParameters)
         moisture = current_moisture();
         //ESP_LOGI(TAG, "Watering task received value %i", moisture);
 
+#ifndef ANALOGUE_MOISTURE_INVERTED
         if(armed && moisture <= watering_trigger){
             ESP_LOGI(TAG, "Starting pump because humidity is %i", moisture);
             run_pump(pump_on_time);
@@ -53,13 +67,55 @@ static void watering_task(void* pvParameters)
             ESP_LOGI(TAG, "Rearming pump because humidity is %i", moisture);
             armed = true;
         }
+#else
+        if(armed && moisture >= watering_trigger){
+            ESP_LOGI(TAG, "Starting pump because humidity is %i", moisture);
+            run_pump(pump_on_time);
+            armed = false;
+        } else if(!armed && moisture < rearm_trigger){
+            ESP_LOGI(TAG, "Rearming pump because humidity is %i", moisture);
+            armed = true;
+        }
+#endif
     }
+}
+
+
+static void motor_start()
+{
+#ifdef CONFIG_USE_PWM
+
+#ifndef CONFIG_PUMP_CONTROL_INVERT
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, (PWM_DUTY*(pow(2,PWM_RESOLUTION)) /100 ));
+#else
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, ((100 - PWM_DUTY)*pow(2,PWM_RESOLUTION)) /100 );
+#endif
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL);
+
+#else
+    gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
+#endif
+}
+
+static void motor_stop()
+{
+#ifdef CONFIG_USE_PWM
+
+#ifndef CONFIG_PUMP_CONTROL_INVERT
+    ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, 0);
+#else
+    ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, 1);
+#endif
+
+#else
+    gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+#endif
 }
 
 static void pump_control_task(void* vParameters)
 {
+    int32_t command;
     while(1){
-        int32_t command;
         BaseType_t ret = xQueueReceive(command_queue, &command, portMAX_DELAY);
         if(ret == errQUEUE_EMPTY) continue; // should not happen
 
@@ -67,17 +123,17 @@ static void pump_control_task(void* vParameters)
         else if(command > 0){
             ESP_LOGI(TAG, "Pump will be run for %i ms", command);
             watering = true;
-            gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
-            vTaskDelay(pdMS_TO_TICKS(command));
-            gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+            motor_start();
+            xQueueReceive(command_queue, &command, pdMS_TO_TICKS(command));
+            motor_stop();
             watering = false;
         } else if(command == COMMAND_PUMP_START){
             ESP_LOGI(TAG, "Pump started");
             watering = true;
-            gpio_set_level(PUMP_CONTROL_PIN, PUMP_ON_LEVEL);
+            motor_start();
         } else if(command == COMMAND_PUMP_STOP){
             ESP_LOGI(TAG, "Pump stopped");
-            gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
+            motor_stop();
             watering = false;
         } else {
             ESP_LOGI(TAG, "Received invalid command: %i", command);
@@ -163,7 +219,7 @@ void set_rearm_humidity(uint16_t val)
     rearm_trigger = val;
 }
 
-uint16_t humidity_pct_to_analog(uint16_t humidity)
+uint16_t humidity_pct_to_analog(float humidity)
 {
     return (humidity * (1/ANALOGUE_MOISTURE_CONSTANT)) + ANALOGUE_MOISTURE_OFFSET;
 }
@@ -218,11 +274,40 @@ esp_err_t save_config(uint16_t time_ms, uint16_t watering_trigger_val, uint16_t 
     return fail == 0 ? ESP_OK : ESP_FAIL;
 }
 
+#ifdef CONFIG_USE_PWM
+void init_pwm()
+{
+    ledc_timer_config_t timer_config = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .timer_num = LEDC_TIMER_0,
+        .freq_hz = 4096,
+        .duty_resolution = PWM_RESOLUTION,
+        .clk_cfg = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&timer_config));
+    
+    ledc_channel_config_t channel_config = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = PWM_CHANNEL,
+        .gpio_num = PWM_PIN,
+        .timer_sel = LEDC_AUTO_CLK,
+        .duty = 0, 
+        .hpoint = 0
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&channel_config));
+    ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, 0);
+}
+#endif
+
 void init_watering_control()
 {
+#ifdef CONFIG_USE_PWM
+    init_pwm();
+#else
     gpio_reset_pin(PUMP_CONTROL_PIN);
     gpio_set_level(PUMP_CONTROL_PIN, PUMP_OFF_LEVEL);
     gpio_set_direction(PUMP_CONTROL_PIN, GPIO_MODE_OUTPUT);
+#endif
 
     command_queue = xQueueCreate(1,sizeof(int32_t));
     watering = false;
